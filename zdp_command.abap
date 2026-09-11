@@ -1,111 +1,127 @@
 *&---------------------------------------------------------------------*
-*& Report  ZDP_COMMAND
-*&
+*& Report ZDP_COMMAND
 *&---------------------------------------------------------------------*
+*& Pattern:  Command (Behavioral)
+*& Intent:   Encapsulate a request as an object, thereby letting you
+*&           parameterise clients with different requests, queue or log
+*&           requests, and support undoable operations.
 *&
-*&
+*& How this example implements it:
+*&   - `lcl_receiver` is the object that actually knows how to do the
+*&     work; its `action( )` method is the real operation.
+*&   - `lcl_command` is the abstract request object. It holds the
+*&     receiver and declares a single abstract `execute( )`.
+*&   - `lcl_concrete_command` binds the two together: its `execute( )`
+*&     simply calls `action( )` on the receiver it was constructed with.
+*&   - `lcl_invoker` triggers the request through `execute_command( )`.
+*&     It only ever sees the abstract command -- it knows nothing about
+*&     the receiver or about what the command really does.
 *&---------------------------------------------------------------------*
 REPORT zdp_command.
 
 
-CLASS receiver DEFINITION.
+CLASS lcl_receiver DEFINITION.
+
   PUBLIC SECTION.
-    METHODS:
-      action.
+    "! The real operation. Only a command object ever calls this.
+    METHODS action.
+
 ENDCLASS.
 
-CLASS receiver IMPLEMENTATION.
+
+CLASS lcl_receiver IMPLEMENTATION.
+
   METHOD action.
-    WRITE: / 'Console.WriteLine(Called Receiver.Action()'.
+    cl_demo_output=>write( |Receiver: action( ) was carried out.| ).
   ENDMETHOD.
+
 ENDCLASS.
 
-CLASS command DEFINITION ABSTRACT.
+
+CLASS lcl_command DEFINITION ABSTRACT.
+
   PUBLIC SECTION.
-    METHODS:
-      constructor IMPORTING io_receiver TYPE REF TO receiver
-      , execute ABSTRACT.
+    METHODS constructor
+      IMPORTING receiver TYPE REF TO lcl_receiver.
+
+    "! Carries out the encapsulated request on the receiver.
+    METHODS execute ABSTRACT.
 
   PROTECTED SECTION.
-    DATA: mo_receiver TYPE REF TO receiver.
+    "! The object the request is finally delegated to.
+    DATA receiver TYPE REF TO lcl_receiver.
+
 ENDCLASS.
 
 
-CLASS command IMPLEMENTATION.
+CLASS lcl_command IMPLEMENTATION.
+
   METHOD constructor.
-    me->mo_receiver = io_receiver.
+    me->receiver = receiver.
   ENDMETHOD.
+
 ENDCLASS.
 
-CLASS concrete_command DEFINITION INHERITING FROM command.
+
+CLASS lcl_concrete_command DEFINITION INHERITING FROM lcl_command.
+
   PUBLIC SECTION.
-    METHODS:
-      execute REDEFINITION.
+    "! Binds the request to lcl_receiver=>action( ).
+    METHODS execute REDEFINITION.
+
 ENDCLASS.
 
 
-CLASS concrete_command IMPLEMENTATION.
+CLASS lcl_concrete_command IMPLEMENTATION.
+
   METHOD execute.
-    me->mo_receiver->action( ).
+    receiver->action( ).
   ENDMETHOD.
+
 ENDCLASS.
 
-CLASS invoker DEFINITION.
+
+CLASS lcl_invoker DEFINITION.
+
   PUBLIC SECTION.
-    METHODS:
-      set_command IMPORTING io_command TYPE REF TO command
-      , execute_command.
+    "! Stores the command that will be triggered later on.
+    METHODS set_command
+      IMPORTING command TYPE REF TO lcl_command.
+
+    "! Triggers the stored command without knowing what it does.
+    METHODS execute_command.
+
   PRIVATE SECTION.
-    DATA: mo_command TYPE REF TO command.
+    DATA command TYPE REF TO lcl_command.
+
 ENDCLASS.
 
-CLASS invoker IMPLEMENTATION.
+
+CLASS lcl_invoker IMPLEMENTATION.
+
   METHOD set_command.
-    me->mo_command = io_command.
+    me->command = command.
   ENDMETHOD.
 
   METHOD execute_command.
-    me->mo_command->execute( ).
-  ENDMETHOD.
-ENDCLASS.
-
-CLASS lcl_application DEFINITION CREATE  PRIVATE.
-  PUBLIC SECTION.
-    CLASS-METHODS:run.
-    METHODS: constructor.
-  PRIVATE SECTION.
-    CLASS-DATA: so_application TYPE REF TO lcl_application.
-ENDCLASS.
-
-CLASS lcl_application IMPLEMENTATION.
-  METHOD run.
-    DATA: exc_ref  TYPE REF TO cx_root
-          , exc_text TYPE string.
-
-    IF lcl_application=>so_application IS INITIAL.
-      TRY .
-          CREATE OBJECT lcl_application=>so_application.
-        CATCH cx_sy_create_object_error INTO exc_ref.
-          exc_text = exc_ref->get_text( ).
-          MESSAGE exc_text TYPE 'I'.
-      ENDTRY.
-    ENDIF.
+    command->execute( ).
   ENDMETHOD.
 
-  METHOD constructor.
-    DATA: receiver TYPE REF TO receiver,
-          command  TYPE REF TO concrete_command
-          , invoker TYPE REF TO invoker.
-
-    CREATE OBJECT receiver.
-    CREATE OBJECT command EXPORTING io_receiver = receiver.
-
-    CREATE OBJECT invoker.
-
-    invoker->set_command( command ).
-    invoker->execute_command( ).
-  ENDMETHOD.
 ENDCLASS.
+
 
 START-OF-SELECTION.
-  lcl_application=>run( ).
+
+  " The client wires receiver, command and invoker together...
+  DATA(receiver) = NEW lcl_receiver( ).
+  DATA(command)  = NEW lcl_concrete_command( receiver ).
+  DATA(invoker)  = NEW lcl_invoker( ).
+
+  cl_demo_output=>write( |The invoker is given a command object and later triggers it. | &&
+                         |It never learns which receiver is behind the request.| ).
+
+  " ...and from here on the invoker deals with the abstract command only.
+  invoker->set_command( command ).
+  invoker->execute_command( ).
+
+  cl_demo_output=>display( ).
