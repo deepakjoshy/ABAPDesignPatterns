@@ -1,192 +1,242 @@
 *&---------------------------------------------------------------------*
-*& Report  ZDP_ITERATOR
-*&
+*& Report ZDP_ITERATOR
 *&---------------------------------------------------------------------*
+*& Pattern:  Iterator (Behavioral)
+*& Intent:   Provide a way to access the elements of an aggregate
+*&           object sequentially without exposing its underlying
+*&           representation.
 *&
-*&
+*& How this example implements it:
+*&   - `if_collection` is the aggregate interface (add, remove, clear,
+*&     size, is_empty, get) plus the factory method `get_iterator`.
+*&   - `lcl_collection` is the concrete aggregate. It stores the
+*&     elements in an internal table -- callers never see that table
+*&     when they iterate.
+*&   - `if_iterator` is the iterator interface (first, has_next,
+*&     get_next, get_index, set_step) and keeps the traversal state
+*&     (current position and step width).
+*&   - `lcl_iterator` is the concrete iterator. It holds a reference
+*&     back to the collection and walks it through `get( index )`, so
+*&     the traversal logic lives outside the collection.
+*&   - The demo fills a collection with `lcl_item` objects and walks
+*&     it with `has_next( )` / `get_next( )` only.
 *&---------------------------------------------------------------------*
 REPORT zdp_iterator.
 
 
 CLASS lcl_item DEFINITION.
+
   PUBLIC SECTION.
-    METHODS: constructor IMPORTING iv_name TYPE string.
-    DATA: v_name TYPE string READ-ONLY.
+    METHODS constructor
+      IMPORTING name TYPE string.
+
+    DATA name TYPE string READ-ONLY.
+
 ENDCLASS.
 
+
 CLASS lcl_item IMPLEMENTATION.
+
   METHOD constructor.
-    v_name = iv_name.
+    me->name = name.
   ENDMETHOD.
+
 ENDCLASS.
+
 
 INTERFACE if_collection DEFERRED.
 
+
 INTERFACE if_iterator.
-  METHODS: get_index RETURNING VALUE(index) TYPE i,
-    has_next RETURNING VALUE(has_next) TYPE flag,
-    get_next RETURNING VALUE(object) TYPE REF TO object,
-    first RETURNING VALUE(object) TYPE REF TO object,
-    set_step IMPORTING VALUE(iv_step) TYPE i.
-  DATA: v_step TYPE i.
-  DATA: v_current TYPE i.
-  DATA: o_collection TYPE REF TO if_collection.
+
+  "! Position the iterator on the first element and return it.
+  METHODS first
+    RETURNING VALUE(result) TYPE REF TO object.
+
+  "! True as long as a further element can be reached with the
+  "! current step width.
+  METHODS has_next
+    RETURNING VALUE(result) TYPE flag.
+
+  "! Advance by the current step width and return that element.
+  METHODS get_next
+    RETURNING VALUE(result) TYPE REF TO object.
+
+  METHODS get_index
+    RETURNING VALUE(result) TYPE i.
+
+  "! Change how many positions get_next( ) jumps forward.
+  METHODS set_step
+    IMPORTING VALUE(step) TYPE i.
+
+  DATA step TYPE i.
+  DATA current TYPE i.
+  DATA collection TYPE REF TO if_collection.
+
 ENDINTERFACE.
+
 
 INTERFACE if_collection.
-  METHODS: get_iterator RETURNING VALUE(iterator) TYPE REF TO if_iterator.
-  METHODS: add IMPORTING element TYPE REF TO object,
-    remove IMPORTING element TYPE REF TO object,
-    clear,
-    size RETURNING VALUE(size) TYPE i,
-    is_empty RETURNING VALUE(empty) TYPE flag,
-    get IMPORTING index         TYPE i
-        RETURNING VALUE(object) TYPE REF TO object.
+
+  "! Creates an iterator that traverses this collection.
+  METHODS get_iterator
+    RETURNING VALUE(result) TYPE REF TO if_iterator.
+
+  METHODS add
+    IMPORTING element TYPE REF TO object.
+
+  METHODS remove
+    IMPORTING element TYPE REF TO object.
+
+  METHODS clear.
+
+  METHODS size
+    RETURNING VALUE(result) TYPE i.
+
+  METHODS is_empty
+    RETURNING VALUE(result) TYPE flag.
+
+  "! Returns the element at the given position, or an unbound
+  "! reference when the position does not exist.
+  METHODS get
+    IMPORTING index         TYPE i
+    RETURNING VALUE(result) TYPE REF TO object.
+
 ENDINTERFACE.
 
+
 CLASS lcl_iterator DEFINITION.
+
   PUBLIC SECTION.
-    INTERFACES: if_iterator.
-    METHODS: constructor IMPORTING io_collection TYPE REF TO if_collection.
-    ALIASES: get_index FOR if_iterator~get_index,
-    has_next FOR if_iterator~has_next,
-    get_next FOR if_iterator~get_next,
-    first FOR if_iterator~first,
-    set_step FOR if_iterator~set_step.
+    INTERFACES if_iterator.
+
+    METHODS constructor
+      IMPORTING collection TYPE REF TO if_collection.
+
+    ALIASES get_index FOR if_iterator~get_index.
+    ALIASES has_next FOR if_iterator~has_next.
+    ALIASES get_next FOR if_iterator~get_next.
+    ALIASES first FOR if_iterator~first.
+    ALIASES set_step FOR if_iterator~set_step.
 
   PRIVATE SECTION.
-    ALIASES:  v_step FOR if_iterator~v_step,
-    v_current FOR if_iterator~v_current,
-    o_collection FOR if_iterator~o_collection.
+    ALIASES step FOR if_iterator~step.
+    ALIASES current FOR if_iterator~current.
+    ALIASES collection FOR if_iterator~collection.
+
 ENDCLASS.
+
 
 CLASS lcl_collection DEFINITION.
+
   PUBLIC SECTION.
-    INTERFACES: if_collection.
-    DATA: i_items TYPE STANDARD TABLE OF REF TO object.
-    ALIASES: get_iterator FOR if_collection~get_iterator,
-            add FOR if_collection~add,
-            remove FOR if_collection~clear,
-            clear FOR if_collection~size,
-            size FOR if_collection~is_empty,
-            get FOR if_collection~get.
+    INTERFACES if_collection.
+
+    DATA items TYPE STANDARD TABLE OF REF TO object.
+
+    ALIASES get_iterator FOR if_collection~get_iterator.
+    ALIASES add FOR if_collection~add.
+    ALIASES remove FOR if_collection~remove.
+    ALIASES clear FOR if_collection~clear.
+    ALIASES size FOR if_collection~size.
+    ALIASES is_empty FOR if_collection~is_empty.
+    ALIASES get FOR if_collection~get.
+
 ENDCLASS.
 
+
 CLASS lcl_collection IMPLEMENTATION.
+
   METHOD if_collection~get_iterator.
-    CREATE OBJECT iterator
-      TYPE lcl_iterator
-      EXPORTING
-        io_collection = me.
+    result = NEW lcl_iterator( me ).
   ENDMETHOD.
 
   METHOD if_collection~add.
-    APPEND element TO i_items.
+    APPEND element TO items.
   ENDMETHOD.
 
   METHOD if_collection~remove.
-    DELETE i_items WHERE table_line EQ element.
+    DELETE items WHERE table_line = element.
   ENDMETHOD.
 
   METHOD if_collection~clear.
-    CLEAR: i_items.
+    CLEAR items.
   ENDMETHOD.
 
   METHOD if_collection~size.
-    size = lines( i_items ).
+    result = lines( items ).
   ENDMETHOD.
 
   METHOD if_collection~is_empty.
     IF me->size( ) IS INITIAL.
-      empty = 'X'.
+      result = abap_true.
     ENDIF.
   ENDMETHOD.
 
   METHOD if_collection~get.
-    READ TABLE i_items INTO object INDEX index.
+    READ TABLE items INTO result INDEX index.
   ENDMETHOD.
+
 ENDCLASS.
 
+
 CLASS lcl_iterator IMPLEMENTATION.
+
   METHOD constructor.
-    o_collection = io_collection.
-    v_step = 1.
+    me->collection = collection.
+    step = 1.
   ENDMETHOD.
 
   METHOD if_iterator~first.
-    v_current = 1.
-    object = o_collection->get( v_current ).
+    current = 1.
+    result = collection->get( current ).
   ENDMETHOD.
 
   METHOD if_iterator~get_next.
-    v_current = v_current + v_step.
-    object = o_collection->get( v_current ).
+    current = current + step.
+    result = collection->get( current ).
   ENDMETHOD.
 
   METHOD if_iterator~has_next.
-    DATA obj TYPE REF TO object.
-    DATA idx TYPE i.
-    idx = v_current + v_step.
-    obj = o_collection->get( idx ).
-    IF obj IS BOUND.
-      has_next = 'X'.
+    DATA(next_index) = current + step.
+    DATA(next_element) = collection->get( next_index ).
+    IF next_element IS BOUND.
+      result = abap_true.
     ENDIF.
   ENDMETHOD.
 
   METHOD if_iterator~set_step.
-    me->v_step = iv_step.
+    me->step = step.
   ENDMETHOD.
 
   METHOD if_iterator~get_index.
-    index = index.
+    " This example does not expose the traversal position, so the
+    " initial value is returned.
   ENDMETHOD.
+
 ENDCLASS.
 
-CLASS lcl_main DEFINITION.
-  PUBLIC SECTION.
-    CLASS-METHODS:run.
-ENDCLASS.
-
-CLASS lcl_main IMPLEMENTATION.
-  METHOD run.
-    DATA: o_collection TYPE REF TO if_collection.
-    DATA: o_iterator TYPE REF TO if_iterator.
-    DATA: lo_item TYPE REF TO lcl_item.
-
-    CREATE OBJECT o_collection TYPE lcl_collection.
-    o_iterator = o_collection->get_iterator( ).
-
-    CREATE OBJECT lo_item
-      EXPORTING
-        iv_name = 'Item1'.
-    o_collection->add( lo_item ).
-
-    CREATE OBJECT lo_item
-      EXPORTING
-        iv_name = 'Item2'.
-    o_collection->add( lo_item ).
-
-    CREATE OBJECT lo_item
-      EXPORTING
-        iv_name = 'Item3'.
-    o_collection->add( lo_item ).
-
-    CREATE OBJECT lo_item
-      EXPORTING
-        iv_name = 'Item4'.
-    o_collection->add( lo_item ).
-
-    CREATE OBJECT lo_item
-      EXPORTING
-        iv_name = 'Item5'.
-    o_collection->add( lo_item ).
-
-    WHILE o_iterator->has_next( ) IS NOT INITIAL.
-      lo_item ?= o_iterator->get_next( ).
-      WRITE: / lo_item->v_name.
-    ENDWHILE.
-  ENDMETHOD.
-ENDCLASS.
 
 START-OF-SELECTION.
-  lcl_main=>run( ).
+
+  " The aggregate: callers never touch its internal table directly.
+  DATA(collection) = NEW lcl_collection( ).
+
+  collection->add( NEW lcl_item( 'Item1' ) ).
+  collection->add( NEW lcl_item( 'Item2' ) ).
+  collection->add( NEW lcl_item( 'Item3' ) ).
+  collection->add( NEW lcl_item( 'Item4' ) ).
+  collection->add( NEW lcl_item( 'Item5' ) ).
+
+  cl_demo_output=>write( |Collection holds { collection->size( ) } items| ).
+  cl_demo_output=>write( |Walking it through the iterator only:| ).
+
+  " The iterator knows how to traverse; the collection stays opaque.
+  DATA(iterator) = collection->get_iterator( ).
+
+  WHILE iterator->has_next( ) = abap_true.
+    DATA(item) = CAST lcl_item( iterator->get_next( ) ).
+    cl_demo_output=>write( |  { item->name }| ).
+  ENDWHILE.
+
+  cl_demo_output=>display( ).
