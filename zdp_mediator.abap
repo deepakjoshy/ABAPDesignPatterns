@@ -1,136 +1,188 @@
 *&---------------------------------------------------------------------*
-*& Report  ZDP_MEDIATOR
-*&
+*& Report ZDP_MEDIATOR
 *&---------------------------------------------------------------------*
+*& Pattern:  Mediator (Behavioral)
+*& Intent:   Define an object that encapsulates how a set of objects
+*&           interact. Mediator promotes loose coupling by keeping
+*&           objects from referring to each other explicitly, and it
+*&           lets you vary their interaction independently.
 *&
-*&
+*& How this example implements it:
+*&   - `lcl_united_nations` is the abstract mediator. It declares the
+*&     single abstract operation `declear`, which colleagues call to
+*&     send a message to "the other side".
+*&   - `lcl_un_security_council` is the concrete mediator. It knows
+*&     both colleagues and decides who receives a message: whoever
+*&     did NOT send it.
+*&   - `lcl_country` is the abstract colleague. It only ever holds a
+*&     reference to the mediator -- never to the other colleague.
+*&   - `lcl_usa` and `lcl_irag` are the concrete colleagues. They talk
+*&     by calling `declear` on the mediator and receive through
+*&     `get_message`, so the two countries are never directly coupled.
 *&---------------------------------------------------------------------*
 REPORT zdp_mediator.
-CLASS united_nations DEFINITION DEFERRED.
 
-CLASS country DEFINITION ABSTRACT.
+CLASS lcl_united_nations DEFINITION DEFERRED.
+
+
+CLASS lcl_country DEFINITION ABSTRACT.
+
   PUBLIC SECTION.
-    METHODS:
-      constructor IMPORTING io_mediator TYPE REF TO united_nations.
+    METHODS constructor
+      IMPORTING mediator TYPE REF TO lcl_united_nations.
+
   PROTECTED SECTION.
-    DATA: mo_mediator TYPE REF TO united_nations.
+    "! The only link a colleague has to the outside world.
+    DATA mediator TYPE REF TO lcl_united_nations.
+
 ENDCLASS.
 
-CLASS country IMPLEMENTATION.
+
+CLASS lcl_country IMPLEMENTATION.
+
   METHOD constructor.
-    me->mo_mediator = io_mediator.
+    me->mediator = mediator.
   ENDMETHOD.
+
 ENDCLASS.
 
-CLASS united_nations DEFINITION ABSTRACT.
+
+CLASS lcl_united_nations DEFINITION ABSTRACT.
+
   PUBLIC SECTION.
-    METHODS:
-      declear ABSTRACT IMPORTING iv_message   TYPE string
-                                 io_colleague TYPE REF TO country.
+    "! Routes a message from the sending colleague to the other one.
+    METHODS declear ABSTRACT
+      IMPORTING message   TYPE string
+                colleague TYPE REF TO lcl_country.
+
 ENDCLASS.
 
-CLASS irag DEFINITION INHERITING FROM country.
+
+CLASS lcl_irag DEFINITION INHERITING FROM lcl_country.
+
   PUBLIC SECTION.
-    METHODS:
-        constructor IMPORTING io_mediator TYPE REF TO united_nations
-       ,declear IMPORTING iv_message TYPE string
-       ,get_message IMPORTING iv_message TYPE string
-       .
+    METHODS constructor
+      IMPORTING mediator TYPE REF TO lcl_united_nations.
+
+    "! Sends a message -- always via the mediator, never directly.
+    METHODS declear
+      IMPORTING message TYPE string.
+
+    "! Called by the mediator when the other colleague spoke.
+    METHODS get_message
+      IMPORTING message TYPE string.
+
 ENDCLASS.
 
-CLASS irag IMPLEMENTATION.
+
+CLASS lcl_irag IMPLEMENTATION.
+
   METHOD constructor.
-    super->constructor( io_mediator ).
+    super->constructor( mediator ).
   ENDMETHOD.
 
   METHOD declear.
-    me->mo_mediator->declear( iv_message = iv_message io_colleague =
-me ).
+    me->mediator->declear( message   = message
+                           colleague = me ).
   ENDMETHOD.
 
   METHOD get_message.
-    WRITE: / '伊拉克获得对方信息: ', iv_message.
+    cl_demo_output=>write( |伊拉克获得对方信息: { message }| ).
   ENDMETHOD.
+
 ENDCLASS.
 
-CLASS usa DEFINITION INHERITING FROM country.
+
+CLASS lcl_usa DEFINITION INHERITING FROM lcl_country.
+
   PUBLIC SECTION.
-    METHODS:
-      constructor IMPORTING io_mediator TYPE REF TO united_nations
-     ,declear IMPORTING iv_message TYPE string
-     ,get_message IMPORTING iv_message TYPE string
-     .
+    METHODS constructor
+      IMPORTING mediator TYPE REF TO lcl_united_nations.
+
+    "! Sends a message -- always via the mediator, never directly.
+    METHODS declear
+      IMPORTING message TYPE string.
+
+    "! Called by the mediator when the other colleague spoke.
+    METHODS get_message
+      IMPORTING message TYPE string.
+
 ENDCLASS.
 
-CLASS usa IMPLEMENTATION.
+
+CLASS lcl_usa IMPLEMENTATION.
+
   METHOD constructor.
-    super->constructor( io_mediator ).
+    super->constructor( mediator ).
   ENDMETHOD.
 
   METHOD declear.
-    me->mo_mediator->declear( iv_message = iv_message io_colleague = me ).
+    me->mediator->declear( message   = message
+                           colleague = me ).
   ENDMETHOD.
 
   METHOD get_message.
-    WRITE: / '美国获得对方信息: ', iv_message.
+    cl_demo_output=>write( |美国获得对方信息: { message }| ).
   ENDMETHOD.
+
 ENDCLASS.
 
-CLASS united_nations_securitycouncil DEFINITION INHERITING FROM united_nations.
 
+CLASS lcl_un_security_council DEFINITION INHERITING FROM lcl_united_nations.
 
   PUBLIC SECTION.
-    METHODS:
-      set_colleague1 IMPORTING io_co1 TYPE REF TO usa,
-      set_colleague2 IMPORTING io_co2 TYPE REF TO irag,
-      declear REDEFINITION.
+    METHODS set_colleague1
+      IMPORTING colleague TYPE REF TO lcl_usa.
+
+    METHODS set_colleague2
+      IMPORTING colleague TYPE REF TO lcl_irag.
+
+    METHODS declear REDEFINITION.
+
   PRIVATE SECTION.
-    DATA: mo_co1 TYPE REF TO usa,
-          mo_co2 TYPE REF TO irag.
+    DATA colleague1 TYPE REF TO lcl_usa.
+    DATA colleague2 TYPE REF TO lcl_irag.
+
 ENDCLASS.
 
 
-CLASS united_nations_securitycouncil IMPLEMENTATION.
+CLASS lcl_un_security_council IMPLEMENTATION.
+
   METHOD set_colleague1.
-    me->mo_co1 = io_co1.
+    me->colleague1 = colleague.
   ENDMETHOD.
 
   METHOD set_colleague2.
-    me->mo_co2 = io_co2.
+    me->colleague2 = colleague.
   ENDMETHOD.
 
   METHOD declear.
-    IF io_colleague EQ mo_co1.
-      mo_co2->get_message( iv_message ).
+    " The mediator is the only place that knows both sides.
+    IF colleague = colleague1.
+      colleague2->get_message( message ).
     ELSE.
-      mo_co1->get_message( iv_message ).
+      colleague1->get_message( message ).
     ENDIF.
   ENDMETHOD.
+
 ENDCLASS.
 
-CLASS mainapp DEFINITION.
-  PUBLIC SECTION.
-    CLASS-METHODS:
-      main.
-ENDCLASS.
-
-CLASS mainapp IMPLEMENTATION.
-  METHOD main.
-    DATA: unsc TYPE REF TO united_nations_securitycouncil,
-          c1   TYPE REF TO usa
-          , c2 TYPE REF TO irag.
-    CREATE OBJECT unsc.
-
-    c1 = NEW usa( unsc ).
-    c2 = NEW irag( unsc ).
-
-    unsc->set_colleague2( c2 ).
-    unsc->set_colleague1( c1 ).
-
-    c1->declear( '不准研制核武器，否则就要发动战争' ).
-    c2->declear( '我们没有核武器，也不怕侵略' ).
-  ENDMETHOD.
-ENDCLASS.
 
 START-OF-SELECTION.
-  mainapp=>main( ).
+
+  " The concrete mediator sits between the two colleagues.
+  DATA(security_council) = NEW lcl_un_security_council( ).
+
+  " Each colleague only knows the mediator.
+  DATA(america) = NEW lcl_usa( security_council ).
+  DATA(iraq)    = NEW lcl_irag( security_council ).
+
+  security_council->set_colleague2( iraq ).
+  security_council->set_colleague1( america ).
+
+  cl_demo_output=>write( |Both countries talk only through the Security Council:| ).
+
+  america->declear( '不准研制核武器，否则就要发动战争' ).
+  iraq->declear( '我们没有核武器，也不怕侵略' ).
+
+  cl_demo_output=>display( ).
