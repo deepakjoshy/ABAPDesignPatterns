@@ -1,63 +1,73 @@
 *&---------------------------------------------------------------------*
-*& Report  ZDP_SINGLETON
-*&
+*& Report ZDP_SINGLETON
 *&---------------------------------------------------------------------*
+*& Pattern:  Singleton (Creational)
+*& Intent:   Ensure a class has only one instance, and provide a
+*&           single global point of access to it.
 *&
-*&
+*& How this example implements it:
+*&   - CREATE PRIVATE on the class stops anyone outside the class
+*&     from instantiating it directly with `NEW` / `CREATE OBJECT`.
+*&   - A class-level attribute (`instance`) holds the one-and-only
+*&     object. It starts out empty.
+*&   - The class method `get_instance` is the only way callers can
+*&     get a reference: the first call creates the object and caches
+*&     it, every later call just returns the cached reference.
 *&---------------------------------------------------------------------*
 REPORT zdp_singleton.
 
-
 CLASS lcl_application DEFINITION CREATE PRIVATE.
-  PUBLIC SECTION.
-    CLASS-METHODS:
-      get_instance
-        RETURNING VALUE(ro_instance) TYPE REF TO lcl_application.
 
-    METHODS:
-      set_name IMPORTING iv_name TYPE char30,
-      get_name RETURNING VALUE(rv_name) TYPE char30.
+  PUBLIC SECTION.
+    "! Returns the single shared instance, creating it on first access.
+    CLASS-METHODS get_instance
+      RETURNING VALUE(result) TYPE REF TO lcl_application.
+
+    METHODS set_name
+      IMPORTING name TYPE string.
+
+    METHODS get_name
+      RETURNING VALUE(result) TYPE string.
 
   PRIVATE SECTION.
-    CLASS-DATA: lo_apps TYPE REF TO lcl_application.
-    DATA: v_name TYPE char30.
+    "! The one shared instance. Empty until the first get_instance( ) call.
+    CLASS-DATA instance TYPE REF TO lcl_application.
+    DATA name TYPE string.
+
 ENDCLASS.
 
-CLASS lcl_application IMPLEMENTATION.
-  METHOD get_instance.
-    IF lo_apps IS INITIAL.
-      CREATE OBJECT lo_apps.
-    ENDIF.
 
-    ro_instance = lo_apps.
+CLASS lcl_application IMPLEMENTATION.
+
+  METHOD get_instance.
+    IF instance IS NOT BOUND.
+      instance = NEW #( ).
+    ENDIF.
+    result = instance.
   ENDMETHOD.
 
   METHOD set_name.
-    me->v_name = iv_name.
+    me->name = name.
   ENDMETHOD.
 
   METHOD get_name.
-    rv_name = me->v_name.
+    result = name.
   ENDMETHOD.
+
 ENDCLASS.
 
+
 START-OF-SELECTION.
-  DATA: lo_application TYPE REF TO lcl_application.
-  DATA: lv_result TYPE char30.
 
-  WRITE: / 'LO_APPLICATION'.
+  " First caller creates the instance and sets its name.
+  DATA(app_a) = lcl_application=>get_instance( ).
+  app_a->set_name( 'Configured by app_a' ).
 
-  lo_application = lcl_application=>get_instance( ).
-  lo_application->set_name( ' This is first object' ).
+  " Second caller only ever asks for "the" instance -- it never
+  " creates its own, so it sees the name app_a set above.
+  DATA(app_b) = lcl_application=>get_instance( ).
 
-  lv_result = lo_application->get_name( ).
-  WRITE: / lv_result.
-  CLEAR lv_result.
-
-  DATA: lo_2nd_apps TYPE REF TO lcl_application.
-  SKIP 2.
-  WRITE: / 'LO_2ND_APPS : '.
-  lo_2nd_apps = lcl_application=>get_instance( ).
-  lv_result = lo_2nd_apps->get_name( ).
-  WRITE: / lv_result.
-  CLEAR lv_result.
+  cl_demo_output=>write( |app_a name: { app_a->get_name( ) }| ).
+  cl_demo_output=>write( |app_b name: { app_b->get_name( ) }| ).
+  cl_demo_output=>write( |app_a and app_b are the same object: { xsdbool( app_a = app_b ) }| ).
+  cl_demo_output=>display( ).
